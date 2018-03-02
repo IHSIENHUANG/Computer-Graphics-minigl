@@ -1,5 +1,4 @@
-/**
- * minigl.cpp
+/*gl.cpp
  * -------------------------------
  * Implement miniGL here.
  *
@@ -23,7 +22,7 @@
 #include <cmath>
 #include <vector>
 #include <cstdio>
-
+#include <limits.h>
 using namespace std;
 #define DEBUG 0
 #define PI 3.141592
@@ -68,7 +67,7 @@ mat4 identity_matrix =  {{1.0f,0,0,0,0,1.0f,0,0,0,0,1.0f,0,0,0,0,1.0f}};
 MGLmatrix_mode pro_mode;
 vector<mat4> Projection_stack(1,identity_matrix);
 vector<mat4> Model_stack(1,identity_matrix);
-
+vector<int> z_buffer(500*500,INT_MAX);
 /**
  * Standard macro to report errors
  */
@@ -92,7 +91,7 @@ inline void MGL_ERROR(const char* description) {
  */
 void Rasterize_Triangle(const Triangle& tri,int width,int height,MGLpixel* data)
 {
-        
+  // cout<<"width "<<width<<" height "<<height<<endl; 
    for(int i = 0 ;i<width;i++)
     {
         for(int j = 0 ; j < height ;j++)
@@ -127,6 +126,7 @@ void Rasterize_Triangle(const Triangle& tri,int width,int height,MGLpixel* data)
                 arfa = area_PBC/area_ABC;
                 beta = area_APC/area_ABC;
                 gama = area_ABP/area_ABC;
+                double z = arfa*T_A.position[2]+beta*T_B.position[2]+gama*T_C.position[2];//stroe z position
                 int flag=0;
                 if(arfa>=0 && arfa <=1) flag++;
                 if(beta>=0 && beta <=1) flag++;
@@ -134,8 +134,20 @@ void Rasterize_Triangle(const Triangle& tri,int width,int height,MGLpixel* data)
                 if(flag==3)
                 {
                     //data[i+width*j] = Make_Pixel(255,255,255);
+                   // cout<<"arfe beta gama "<<arfa+beta+gama<<endl;
+                    if(data[i+width*j]==255 || z<z_buffer[i+width*j] )//maintain a global z_buffer
+                    {
+                        vec3 bay_color;
+                        for(int k = 0 ; k <3;k++)
+                        {
+                            bay_color[k]=arfa*T_A.color[k]+beta*T_B.color[k]+gama*T_C.color[k];    
+                        }
                         
-                    data[i+width*j] = Make_Pixel(T_A.color[0]*255.0f,T_A.color[1]*255.0f,T_A.color[2]*255.0f);
+                        
+                        data[i+width*j] = Make_Pixel(bay_color[0]*255.0f,bay_color[1]*255.0f,bay_color[2]*255.0f);
+                        z_buffer[i+width*j] = z;
+                        
+                    }
                 }
         }
     }
@@ -249,11 +261,23 @@ void mglVertex3(MGLfloat x,
  */
 void mglMatrixMode(MGLmatrix_mode mode)
 {
-     Projection_stack.clear();           
-     Projection_stack.push_back(identity_matrix);
-     Model_stack.clear();
-     Model_stack.push_back(identity_matrix);
+
+    // Projection_stack.clear();         
+    // if(!Projection_stack.empty())
+//	printf("this is not clena\n");  
+  //   Projection_stack.push_back(identity_matrix);
+    // Model_stack.clear();
+    // Model_stack.push_back(identity_matrix);
     pro_mode = mode;
+    if(pro_mode==MGL_PROJECTION)
+    {
+	 Projection_stack.clear();         
+         Projection_stack.push_back(identity_matrix);
+        Model_stack.clear();
+        Model_stack.push_back(identity_matrix);
+
+
+    }
 #if DEBUG    
     cout<<"the mode style is "<<pro_mode<<endl;
 #endif
@@ -303,6 +327,8 @@ void mglLoadIdentity()
         cout<<"this time is a identiy matrix"<<endl;
 #endif       
         Projection_stack.back()=Projection_stack.back()*identity_matrix;
+        // Projection_stack.back()=identity_matrix;
+
     }
     if(pro_mode==MGL_MODELVIEW)
     {
@@ -310,7 +336,8 @@ void mglLoadIdentity()
         cout<<"load identity for MGL_MODELVIEW"<<endl;
 #endif       
         Model_stack.back()=Projection_stack.back()*identity_matrix;    
-        
+       //  Model_stack.back()=identity_matrix;    
+
     }
     
 }
@@ -329,6 +356,15 @@ void mglLoadIdentity()
  */
 void mglLoadMatrix(const MGLfloat *matrix)
 {
+    mat4 tmp;
+    for(int j=0;j<4;j++)
+        for(int i=0;i<4;i++)
+            tmp(i,j) = matrix[j*4+i];
+    if(pro_mode ==MGL_PROJECTION)
+        Projection_stack.back() = tmp;
+    else if(pro_mode ==MGL_MODELVIEW)
+        Model_stack.back() = tmp;
+
 }
 
 /**
@@ -345,7 +381,17 @@ void mglLoadMatrix(const MGLfloat *matrix)
  */
 void mglMultMatrix(const MGLfloat *matrix)
 {
+    mat4 tmp;
+    for(int j=0;j<4;j++)
+        for(int i=0;i<4;i++)
+            tmp(i,j) = matrix[j*4+i];
+    if(pro_mode ==MGL_PROJECTION)
+        Projection_stack.back() = Projection_stack.back()*tmp;
+    else if(pro_mode ==MGL_MODELVIEW)
+        Model_stack.back() = Model_stack.back()*tmp;
+
 }
+
 
 /**
  * Multiply the current matrix by the translation matrix
@@ -396,11 +442,11 @@ void mglRotate(MGLfloat angle,
     
     if(pro_mode ==MGL_PROJECTION)
     {
-        Projection_stack.back() = rotate_matrix*Projection_stack.back();     
+        Projection_stack.back() = Projection_stack.back()*rotate_matrix;     
     }
     if(pro_mode ==MGL_MODELVIEW)
     {
-        Model_stack.back() = rotate_matrix*Model_stack.back();     
+        Model_stack.back() = Model_stack.back()*rotate_matrix;     
     }
     
 }
@@ -483,9 +529,10 @@ void mglOrtho(MGLfloat left,
         printf("make sure this is a projection mode");
 #endif       
        // matrix_4 = matrix_4 * tmp;
-      //  Projection_stack.clear();   
+
+    //    Projection_stack.clear();   
              
-      //  Projection_stack.push_back(identity_matrix);
+       Projection_stack.push_back(identity_matrix);
        Projection_stack.back() = Projection_stack.back()*tmp; 
 
    }
@@ -495,8 +542,8 @@ void mglOrtho(MGLfloat left,
         cout<<"this time is model_view"<<endl;
 #endif        
        
-        //Model_stack.clear(); 
-        //Model_stack.push_back(identity_matrix);
+      //  Model_stack.clear(); 
+        Model_stack.push_back(identity_matrix);
         Model_stack.back()= Model_stack.back()*tmp;     
    }
 
@@ -509,6 +556,7 @@ void mglColor(MGLfloat red,
               MGLfloat green,
               MGLfloat blue)
 {
+  //  cout<<"color is set"<<endl;
     RGB[0] = red;
     RGB[1] = green;
     RGB[2] = blue;
