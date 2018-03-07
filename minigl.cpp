@@ -109,7 +109,12 @@ void Rasterize_Triangle(const Triangle& tri,int width,int height,MGLpixel* data)
                 double a_x = T_A.position[0]/T_A.position[3],a_y = T_A.position[1]/T_A.position[3];
                 double b_x = T_B.position[0]/T_B.position[3],b_y = T_B.position[1]/T_B.position[3];
                 double c_x = T_C.position[0]/T_C.position[3],c_y = T_C.position[1]/T_C.position[3];
-                    
+                
+                // normalized
+                double a_z = T_A.position[2]/T_A.position[3];
+                double b_z = T_B.position[2]/T_B.position[3];
+                double c_z = T_C.position[2]/T_C.position[3];
+                
                 a_x=(a_x+1)*width/2.0-0.5;
                 b_x=(b_x+1)*width/2.0-0.5;
                 c_x=(c_x+1)*width/2.0-0.5;
@@ -126,7 +131,38 @@ void Rasterize_Triangle(const Triangle& tri,int width,int height,MGLpixel* data)
                 arfa = area_PBC/area_ABC;
                 beta = area_APC/area_ABC;
                 gama = area_ABP/area_ABC;
+                
+                double arfa2 = arfa / T_A.position[3];
+                double beta2 = beta / T_B.position[3];
+                double gama2 = gama / T_C.position[3];
+
+                double Z = arfa*a_z+beta*b_z+gama*c_z;
+                if(Z>1 || Z<-1)
+                    continue;
+                arfa = (arfa2)/(arfa2+beta2+gama2);
+                beta = (beta2)/(arfa2+beta2+gama2);
+                gama = (gama2)/(arfa2+beta2+gama2);
+               
+                Z = arfa*a_z+beta*b_z+gama*c_z;
+                if(Z>=1 || Z<=-1)
+                    continue;
+               /*
+                if(a_x>1 ||a_x<-1 || a_y>1||a_y<-1)
+                    arfa=0;
+               if(b_x>1 ||b_x<-1 || b_y>1||b_y<-1)
+                    beta=0;
+                if(c_x>1 ||c_x<-1 || c_y>1||c_y<-1)
+                    gama=0;
+                */
+                /*
+                double X = arfa*a_x+beta*b_x+gama*c_x;
+                double Y = arfa*a_y+beta*b_y+gama*c_y;
+                if(X>1||X<-1||Y>1||Y<-1)
+                    continue;
+*/
+              
                 double z = arfa*T_A.position[2]+beta*T_B.position[2]+gama*T_C.position[2];//stroe z position
+                
                 int flag=0;
                 if(arfa>=0 && arfa <=1) flag++;
                 if(beta>=0 && beta <=1) flag++;
